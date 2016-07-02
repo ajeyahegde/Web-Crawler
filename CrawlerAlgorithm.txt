@@ -1,0 +1,77 @@
+Common Datastructures:
+1. Queue<String> urlQueue
+2. Dictionary<String -> [crawlDelay, recentCrawlTime] >
+
+Methods:-
+
+main()
+{
+  1. Add seedURL's to urlQueue.
+  2. crawledDocuments = 0
+  3. while(crawledDocuments < 50)
+     {
+        url = popUrlFromQueue();
+        domain = getDomainName(url);
+        if (isCrawlable(url)) {
+		crawl(url);
+	}
+	
+
+     }
+}
+
+
+//Pops an element from the front of the queue.
+PopUrlFromQueue()
+{
+//output:First URL from queue as string
+url=popped element
+}
+
+
+//returns a boolean indicating whether the passed url can be crawled or not by looking at robots information.
+isCrawlable(url)
+{
+//Input:Url String
+//Output: true or false boolean which indicates if this URL can be crawled or not.
+Call getDomainName to get the domain name of the current URL
+To domain name string add robots.txt string at the end.
+Use httpGet to fetch robots.txt
+from www.something.com/robots.txt gets urls that are disallowed and add to list.
+}
+
+
+//takes an url as input and returns domain name.
+getDomainName(url)
+{
+//input:URL string
+//output:domain name of the url.
+using regular expression get basic url as string
+}
+
+
+//Makes a GET request to page, stores the content in database and adds the new URL's to the queue.
+crawl()
+{
+//input:Url string
+//Output: void
+1. Call httpGet(url)
+2. crawledData = Based on response(status code or crawled document), either store in database or move to next URL.
+3. UrlList = ExtractUrls(crawledData)
+4. add URLList url's to urlQueue.
+}
+
+//Gets the content retrieved by making a GET request.
+httpGet(String URL)
+{
+//Input: URL to crawl
+//Output: content crawled OR status code if it was not able to crawl.
+}
+
+//Extracts URL's from the content passed and adds to the queue.
+ExtractUrls(content)
+{
+//input:content extracted
+//output:List of Urls that is to be added to queue.
+	get urls present in page and add that to queue.
+} 	

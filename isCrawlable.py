@@ -7,7 +7,7 @@ global crawledList
 crawledList=[]
 
 
-#Takes Url and returns name of robots.txt file and domain name
+#Takes Url as input and returns url of robots.txt file and domain name
 def getRobotsname(url):
     #pattern1 checks for regular expression for domain name
     pattern1="(http|https)://\w+.\w+.([^/]*)+$"

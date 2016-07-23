@@ -57,7 +57,7 @@ def getDisallowedList(robotsFileContent):
 
 
 #Checks if any of the disallowed links are present in current Url,if present returns True
-def isallowed(url,disallowedlist,allowedlist):
+def isAllowed(url,disallowedlist,allowedlist):
     domainPattern="(http|https)://\w+.\w+.[^/]*/"
     pattern1="(http|https)://\w+.\w+.([^/]*)+$"
     if(re.match(pattern1,url)):
@@ -98,7 +98,7 @@ def checkCrawledList(domainName):
     if domainName.endswith("/"):
         domainName=domainName[:-1]
     print(domainName)
-    for tuples in crawledList:
+    for tuples in crawledDomainInfoList:
         if domainName in tuples[0]:
             #current time contains current system time
             currenttime=datetime.datetime.now()
@@ -123,7 +123,7 @@ def isCrawlable(url):
     #disallowed list contains list of disallowed URIs and allowed list contains list of allowed URIs
         disallowedlist,allowedlist,crawlDelay=getDisallowedList(robotsFileContent)
         print("Crawl Delay:",crawlDelay)
-        check=isallowed(url,disallowedlist,allowedlist)
+        check=isAllowed(url,disallowedlist,allowedlist)
         if(check==False):
             return 0,domainName,crawlDelay
     except urllib.request.URLError as e:
@@ -138,11 +138,11 @@ def isCrawlable(url):
 #Function to get details of a page
 def httpGet(url):
     #way of calling http GET method in python,html form is stored in s
-    global html
     try:
         htmlContent=urllib.request.urlopen(url).read()
         html=str(htmlContent)
         #print(htmlContent)
+        return html
     except urllib.request.URLError as e:
         print(e.args)
     except urllib.request.HTTPError as e:
@@ -154,11 +154,10 @@ def httpGet(url):
 
 
 #Function to extract Urls
-def extractUrls():
+def extractUrls(html,url):
     tempUrlList=[]
     tempUrlList.clear()
     #mainUrlList - List to store all the links of the page
-    global mainUrlList
     mainUrlList=[]
     mainUrlList.clear()
     #linkForm-Regular expression pattern to find links present in page
@@ -181,14 +180,14 @@ def extractUrls():
             mainUrlList.append(finalLink)
         else:
             if(link.startswith("/")):
-                finalLink=Url+link
+                finalLink=url+link
             else:
-                finalLink=Url+"/"+link
+                finalLink=url+"/"+link
             mainUrlList.append(finalLink)
     #Loop that adds URLs in mainUrlList to Queue Q.
     for link in mainUrlList:
         #print(link)
-        Q.put(link)
+        urlQueue.put(link)
         #print(Q._qsize())
 
 #Class for threading
@@ -197,46 +196,49 @@ class urlThread(Thread):
         Thread.__init__(self)
         self.threadname=name
     def run(self):
-        while(Q.empty()== False):
+        while(urlQueue.empty()== False):
+            #TODO:write a function called getUrl which returns an URL and read about thread synchronization
+            #TODO:method name start with small letter
+            #TODO:for every method global should not be used httpget should return html content and extracturl should pass html.
             #print(self.threadname)
-            Crawl(Q)
+            url=urlQueue.get()
+            crawl(url)
 
 
 
 #Method which initiates crawling
 def main():
-    global Url
-    global Q
-    global crawledList
-    #Crawled list contins tuples (domain name,last crawled time+crawled delay).
-    crawledList=[]
+    global urlQueue
+    #Crawled list contians tuples (domain name,last crawled time+crawled delay).
+    global crawledDomainInfoList
+    crawledDomainInfoList=[]
     #Queue that stores URLs to be crawled
-    Q=Queue(maxsize=0)
-    Q.put("http://www.python.org")
-    Q.put("http://www.google.com")
+    urlQueue=Queue(maxsize=0)
+    urlQueue.put("http://www.python.org")
+    urlQueue.put("http://www.google.com")
     t1=urlThread("thread1")
     t2=urlThread("thread2")
     t1.start()
     t2.start()
-#This method removes URL from Q and crawls if check==2 along with adding domain name to crawled list
+#This method takes and crawls if check==2 along with adding domain name to crawled list
 #adds the removed URL to Q if check==1 and doesnt crawl if check==0
-def Crawl(Q):
-    global Url
+def crawl(url):
     #URL is removed from Q and stored in Url
-    Url=Q.get()
-    print("URL is:",Url)
-    check,domainName,crawlDelay=isCrawlable(Url)
+    print("URL is:",url)
+    check,domainName,crawlDelay=isCrawlable(url)
     print("Check:",check)
     if(check == 2):
-        httpGet(Url)
-        extractUrls()
+        htmlContent= httpGet(url) #TODO:here htmlcontent should be put to database
+        extractUrls(htmlContent,url)
         if(crawlDelay==0):
             crawlDelay=10
-        crawledList.append((domainName,datetime.datetime.now()+datetime.timedelta(seconds=crawlDelay)))
+            #TODO:crawldelay should be like constant global variable
+            #TODO:method name should be according to rules
+        crawledDomainInfoList.append((domainName,datetime.datetime.now()+datetime.timedelta(seconds=crawlDelay)))
 
     elif(check == 1):
-        Q._put(Url)
-    print(crawledList)
+        urlQueue._put(url)
+    print(crawledDomainInfoList)
 
 main()
 

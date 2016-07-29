@@ -1,20 +1,20 @@
 import urllib.request
 from queue import Queue
-from threading import Thread
+import threading
 import datetime
 import re
-
+from tinydb import TinyDB,Query
 
 #Takes Url and returns name of robots.txt file and domain name
 def getRobotsname(url):
     #pattern1 checks for regular expression for domain name
-    pattern1="(http|https)://\w+.\w+.([^/]*)+$"
+    urlPattern1="(http|https)://\w+.\w+.([^/]*)+$"
     #pattern2 is regular expression for getting URL of the form "http://www.example.com/"
-    pattern2="((http|https)\://\w*\.?.+\.\w+/)"
+    urlPattern2="((http|https)\://\w*\.?.+\.\w+/)"
     #if url is of the form http://www.example.com then "/robots.txt" is added else "robots.txt" is added to www.example.com/
-    if((re.match(pattern1,url)) == None):
-        x=re.findall(pattern2,url)
-        print(x)
+    if((re.match(urlPattern1,url)) == None):
+        x=re.findall(urlPattern2,url)
+        #print(x)
         domainName=x[0][0]
         url=x[0][0]+"robots.txt"
         return url,domainName[:-1]
@@ -30,6 +30,7 @@ def getDisallowedList(robotsFileContent):
     disallowedlist=[]
     allowedlist=[]
     crawlDelay=0
+    #user=1 if User-agent = * and user=0 if otherwise
     user=0
     for i in listOfLinesOfRobots:
         if("User-agent" in i):
@@ -59,14 +60,14 @@ def getDisallowedList(robotsFileContent):
 #Checks if any of the disallowed links are present in current Url,if present returns True
 def isAllowed(url,disallowedlist,allowedlist):
     domainPattern="(http|https)://\w+.\w+.[^/]*/"
-    pattern1="(http|https)://\w+.\w+.([^/]*)+$"
-    if(re.match(pattern1,url)):
+    domainPattern1="(http|https)://\w+.\w+.([^/]*)+$"
+    if(re.match(domainPattern1,url)):
         return True
     x=re.search(domainPattern,url)
     startingIndexofUri=x.end()-1
     #string conatins URL of the present URL
-    string=url[startingIndexofUri:]
-    print("URI is:",string)
+    URIstring=url[startingIndexofUri:]
+    #print("URI is:",URIstring)
     check=None
     for i in disallowedlist:
         pattern=i.strip()
@@ -77,7 +78,7 @@ def isAllowed(url,disallowedlist,allowedlist):
         if "?" in pattern:
             pattern=pattern.replace("?","\?.*")
         #print(pattern)
-        if(re.match(pattern,string) != None):
+        if(re.match(pattern,URIstring) != None):
             check=False
             break
     for i in allowedlist:
@@ -87,7 +88,7 @@ def isAllowed(url,disallowedlist,allowedlist):
         if "?" in pattern:
             pattern=pattern.replace("?","\?.*")
         #print(pattern)
-        if(re.match(pattern,string) != None):
+        if(re.match(pattern,URIstring) != None):
             check=True
             break
     return check
@@ -97,7 +98,7 @@ def isAllowed(url,disallowedlist,allowedlist):
 def checkCrawledList(domainName):
     if domainName.endswith("/"):
         domainName=domainName[:-1]
-    print(domainName)
+    #print(domainName)
     for tuples in crawledDomainInfoList:
         if domainName in tuples[0]:
             #current time contains current system time
@@ -114,22 +115,24 @@ def isCrawlable(url):
     crawlDelay=0
     #robotUrl stores url of robots.txt
     robotUrl,domainName=getRobotsname(url)
-    print("Robots URL is:",robotUrl)
+    #print("Robots URL is:",robotUrl)
     try:
-        s=urllib.request.urlopen(robotUrl).read()
+        robotsContent=urllib.request.urlopen(robotUrl).read()
         global robotsFileContent
     #robotsFileContent is string that contains content of robots.txt
-        robotsFileContent=str(s)
+        robotsFileContent=str(robotsContent)
     #disallowed list contains list of disallowed URIs and allowed list contains list of allowed URIs
         disallowedlist,allowedlist,crawlDelay=getDisallowedList(robotsFileContent)
-        print("Crawl Delay:",crawlDelay)
+        #print("Crawl Delay:",crawlDelay)
         check=isAllowed(url,disallowedlist,allowedlist)
         if(check==False):
             return 0,domainName,crawlDelay
     except urllib.request.URLError as e:
-        print(e.args)
+        print(url)
+        print("Error while opening the robots.txt file",e.args)
     except urllib.request.HTTPError as e:
-        print(e.args)
+        print(url)
+        print("Error while opening the robots.txt file",e.args)
     check=checkCrawledList(domainName)
     if(check==False):
         return 1,domainName,crawlDelay
@@ -144,9 +147,9 @@ def httpGet(url):
         #print(htmlContent)
         return html
     except urllib.request.URLError as e:
-        print(e.args)
+        print("Error while opening url:",url,e.args)
     except urllib.request.HTTPError as e:
-        print(e.args)
+        print("Error while oprning url:",url,e.args)
     #string form of s is stored in html
     #html=str(htmlContent)
     #print(htmlContent)
@@ -161,7 +164,9 @@ def extractUrls(html,url):
     mainUrlList=[]
     mainUrlList.clear()
     #linkForm-Regular expression pattern to find links present in page
-    linkForm="href=\".*?\""
+    linkForm="(href=\".*?\")"
+    html=str(html)
+    linkForm=str(linkForm)
     foundedLinks=re.findall(linkForm, html)
     #for loop that stores all links without some starting and ending string in list called tempUrlList
     for link in foundedLinks:
@@ -191,18 +196,31 @@ def extractUrls(html,url):
         #print(Q._qsize())
 
 #Class for threading
-class urlThread(Thread):
+class urlThread(threading.Thread):
     def __init__(self,name):
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
         self.threadname=name
     def run(self):
-        while(urlQueue.empty()== False):
-            #TODO:write a function called getUrl which returns an URL and read about thread synchronization
-            #TODO:method name start with small letter
-            #TODO:for every method global should not be used httpget should return html content and extracturl should pass html.
-            #print(self.threadname)
-            url=urlQueue.get()
+        lock=threading.Lock()
+        global count
+        count=0
+        while(urlQueue.empty()== False and count < 5):
+            lock.acquire()
+            try:
+                print(self.threadname)
+                url=getUrl()
+                print(url)
+            finally:
+                print("Lock released")
+                lock.release()
             crawl(url)
+            count=count+1
+
+
+#getUrl() removes url from queue and return url
+def getUrl():
+    url=urlQueue.get()
+    return url
 
 
 
@@ -212,28 +230,61 @@ def main():
     #Crawled list contians tuples (domain name,last crawled time+crawled delay).
     global crawledDomainInfoList
     crawledDomainInfoList=[]
+    global database
+    database=TinyDB("db.json")
+    threadList=[]
+    global noOfThreads
+    noOfThreads=5
+    global defaultCrawlDelay
+    defaultCrawlDelay=10
+    global urlQuery
+    urlQuery=Query()
+    database.purge()
+    print(database.all())
     #Queue that stores URLs to be crawled
     urlQueue=Queue(maxsize=0)
     urlQueue.put("http://www.python.org")
     urlQueue.put("http://www.google.com")
-    t1=urlThread("thread1")
-    t2=urlThread("thread2")
-    t1.start()
-    t2.start()
+    urlQueue.put("http://www.youtube.com")
+    urlQueue.put("http://www.bbc.com")
+    urlQueue.put("http://www.msrit.edu")
+    database.insert({"URL":"","content":("","")})
+    for i in range(noOfThreads):
+        threadList.append(urlThread("thread"+str(i)))
+    for i in range(noOfThreads):
+        threadList[i].start()
+    #for i in range(5):
+    #    threadList[i].setDaemon(True)
+    for i in range(noOfThreads):
+        threadList[i].join()
+    for i in database.all():
+        print(i.get('URL'))
+    checkContent=str(input("Enter Url to retrive web info"))
+    print(database.get(urlQuery.URL == checkContent))
+
+
+
 #This method takes and crawls if check==2 along with adding domain name to crawled list
 #adds the removed URL to Q if check==1 and doesnt crawl if check==0
 def crawl(url):
     #URL is removed from Q and stored in Url
     print("URL is:",url)
     check,domainName,crawlDelay=isCrawlable(url)
-    print("Check:",check)
+    #print("Check:",check)
     if(check == 2):
-        htmlContent= httpGet(url) #TODO:here htmlcontent should be put to database
+        htmlContent= httpGet(url)
         extractUrls(htmlContent,url)
+        currentTime=str(datetime.datetime.now())
+        if(database.contains(urlQuery.URL==url)):
+            database.update({"content":(htmlContent,currentTime)},urlQuery.URL==url)
+        else:
+            database.insert({"URL":url,"content":(htmlContent,currentTime)})
         if(crawlDelay==0):
-            crawlDelay=10
-            #TODO:crawldelay should be like constant global variable
-            #TODO:method name should be according to rules
+            crawlDelay=defaultCrawlDelay
+        for tuple in crawledDomainInfoList:
+            if (domainName == tuple[0]):
+                index=crawledDomainInfoList.index(tuple)
+                del crawledDomainInfoList[index]
         crawledDomainInfoList.append((domainName,datetime.datetime.now()+datetime.timedelta(seconds=crawlDelay)))
 
     elif(check == 1):
@@ -241,4 +292,5 @@ def crawl(url):
     print(crawledDomainInfoList)
 
 main()
+
 
